@@ -1,0 +1,54 @@
+# ============ 统一忽略规则（全项目仅此一个 .gitignore）============
+
+# ---- Rust ----
+target/
+
+# ---- Node / 前端 ----
+node_modules/
+dist/
+dist-js/
+dist-ssr/
+*.local
+*.tsbuildinfo
+
+# ---- Tauri 生成物 ----
+gen/schemas/
+.tauri/
+**/generated/
+**/tauri.settings.gradle
+**/tauri.build.gradle.kts
+**/proguard-tauri.pro
+**/tauri.properties
+**/assets/tauri.conf.json
+
+# ---- Android 构建产物 ----
+**/build/
+.gradle/
+.cxx/
+.externalNativeBuild/
+**/captures/
+local.properties
+# 交叉编译的 .so（每次构建重新链接）
+**/jniLibs/
+
+# ---- 成品 / 签名（含口令，勿提交）----
+*.apk
+*.idsig
+*.aab
+*.jks
+*.keystore
+keystore.properties
+key.properties
+
+# ---- 运行时数据 ----
+slots-index.json
+*.log
+
+# ---- OS / IDE ----
+.DS_Store
+Thumbs.db
+.idea/
+.vs/
+*.iml
+*.suo
+*.sublime*
