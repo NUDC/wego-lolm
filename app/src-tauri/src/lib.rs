@@ -5,7 +5,7 @@
 //! - 免 root：系统多用户（见 `multiuser`），特权由自建服务或 su 提供。
 //!
 //! 设备操作只在 Android target 下真正执行（本机 su）；桌面 `tauri dev` 仅供调 UI。
-//! 前端资源在编译期嵌入本 crate；改动前端后需重编本 crate 以更新嵌入内容。(rev2)
+//! 前端资源在编译期嵌入本 crate；改动前端后需重编本 crate 以更新嵌入内容。(rev4 · 页面切换)
 
 mod device;
 mod index;

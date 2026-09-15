@@ -1,24 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, errMsg } from "./api";
-import type { CheckResult, SlotIndex, PrivStatus } from "./types";
+import type { CheckResult, SlotIndex, PrivStatus, PageState } from "./types";
 import SlotCard from "./components/SlotCard";
-import Modal from "./components/Modal";
+import Page from "./components/Page";
 import MultiUserGuide from "./components/MultiUserGuide";
 import MultiUserAuto from "./components/MultiUserAuto";
 
-type BannerKind = "ok" | "err" | "warn" | "info";
+type Kind = "ok" | "err" | "warn" | "info";
 interface BannerState {
   msg: string;
-  kind: BannerKind;
+  kind: Kind;
 }
 interface LogEntry {
   time: string;
   msg: string;
-  kind: BannerKind;
+  kind: Kind;
 }
-interface RenameState {
-  slot: string;
-  name: string;
+
+export interface InputOpts {
+  label?: string;
+  placeholder?: string;
+  initial?: string;
+  ok?: string;
+}
+export interface ConfirmOpts {
+  danger?: boolean;
+  ok?: string;
 }
 
 export default function App() {
@@ -28,27 +35,51 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [rename, setRename] = useState<RenameState | null>(null);
+  const [page, setPage] = useState<PageState | null>(null);
   const [saveSlot, setSaveSlot] = useState("");
   const [saveName, setSaveName] = useState("");
   const [priv, setPriv] = useState<PrivStatus | null>(null);
   const [startCmd, setStartCmd] = useState<string>("");
 
   const bannerTimer = useRef<number | undefined>(undefined);
-
   const rooted = !!check?.root;
+  const isMultiUser = check?.mode === "multiuser";
 
-  const log = useCallback((msg: string, kind: BannerKind = "info") => {
+  const log = useCallback((msg: string, kind: Kind = "info") => {
     setLogs((prev) =>
       [{ time: new Date().toLocaleTimeString(), msg, kind }, ...prev].slice(0, 60),
     );
   }, []);
 
-  const toast = useCallback((msg: string, kind: BannerKind = "info", ms = 2800) => {
+  const toast = useCallback((msg: string, kind: Kind = "info", ms = 2800) => {
     setBanner({ msg, kind });
     window.clearTimeout(bannerTimer.current);
     if (ms) bannerTimer.current = window.setTimeout(() => setBanner(null), ms);
   }, []);
+
+  // 页面式输入 / 确认（替代弹窗）
+  const askInput = useCallback(
+    (title: string, opts: InputOpts = {}) =>
+      new Promise<string | null>((resolve) =>
+        setPage({
+          kind: "input",
+          title,
+          label: opts.label,
+          placeholder: opts.placeholder,
+          value: opts.initial ?? "",
+          ok: opts.ok ?? "确定",
+          resolve,
+        }),
+      ),
+    [],
+  );
+  const askConfirm = useCallback(
+    (title: string, message: string, opts: ConfirmOpts = {}) =>
+      new Promise<boolean>((resolve) =>
+        setPage({ kind: "confirm", title, message, danger: opts.danger, ok: opts.ok ?? "确定", resolve }),
+      ),
+    [],
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -65,11 +96,7 @@ export default function App() {
       setCheckErr(null);
       log("自检通过", "ok");
       if (r.mode === "root" && !r.denylisted) {
-        toast(
-          "建议在 Magisk → 排除列表(DenyList) 勾选 com.tencent.lolm，降低被 ACE 检测",
-          "warn",
-          6000,
-        );
+        toast("建议在 Magisk 排除列表勾选 com.tencent.lolm，降低被 ACE 检测", "warn", 6000);
       }
       if (r.mode === "multiuser") {
         try {
@@ -98,6 +125,11 @@ export default function App() {
     return !!r?.root;
   }, [rooted, doCheck]);
 
+  const openUserSettings = useCallback(
+    () => toast("请前往：设置 → 系统 → 多个用户", "info", 5000),
+    [toast],
+  );
+
   const doSave = useCallback(async () => {
     const slot = saveSlot.trim();
     const name = saveName.trim();
@@ -121,11 +153,10 @@ export default function App() {
   }, [saveSlot, saveName, guardRoot, toast, log, refresh]);
 
   const doSwitch = useCallback(
-    async (slot: string, active: boolean) => {
-      if (!active && !confirm(`切换到「${slot}」？\n将强制关闭游戏、还原该号并重启游戏。`)) return;
+    async (slot: string, _active: boolean) => {
       if (!(await guardRoot())) return toast("未获得 root，无法切换", "err");
       setBusy(true);
-      log(`切换到 '${slot}'…（回存当前号→停游戏→还原→修属主/上下文→拉起）`);
+      log(`切换到 '${slot}'…`);
       try {
         const msg = await api.switchSlot(slot);
         log(msg, "ok");
@@ -142,8 +173,8 @@ export default function App() {
   );
 
   const doRename = useCallback(
-    async (slot: string, value: string) => {
-      setRename(null);
+    async (slot: string, curName: string) => {
+      const value = await askInput("重命名账号", { label: "昵称", initial: curName, ok: "保存" });
       if (!value) return;
       try {
         const msg = await api.renameSlot(slot, value);
@@ -153,7 +184,7 @@ export default function App() {
         toast(`重命名失败：${errMsg(e)}`, "err");
       }
     },
-    [toast, log, refresh],
+    [askInput, toast, log, refresh],
   );
 
   const doExport = useCallback(
@@ -190,7 +221,11 @@ export default function App() {
 
   const doDelete = useCallback(
     async (slot: string, name: string) => {
-      if (!confirm(`确认删除账号「${name}」(slot: ${slot}) 的快照？`)) return;
+      const ok = await askConfirm("删除账号", `确认删除「${name}」\nslot：${slot} 的快照？`, {
+        danger: true,
+        ok: "删除",
+      });
+      if (!ok) return;
       setBusy(true);
       try {
         const msg = await api.deleteSlot(slot);
@@ -203,73 +238,104 @@ export default function App() {
         setBusy(false);
       }
     },
-    [toast, log, refresh],
+    [askConfirm, toast, log, refresh],
   );
 
   useEffect(() => {
     void refresh();
     void doCheck();
-    // 仅首次
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const isMultiUser = check?.mode === "multiuser";
-  const openUserSettings = useCallback(
-    () => toast("请前往：设置 → 系统 → 多个用户，创建用户并在其中安装/登录 LOLM", "info", 6000),
-    [toast],
-  );
-
-  const chip = rooted
-    ? { text: "root 已授权", cls: "chip-ok" }
+  const status = rooted
+    ? { text: "Root 已就绪", cls: "ok" }
     : isMultiUser
-      ? { text: "多用户模式", cls: "chip-idle" }
+      ? { text: "免 Root 模式", cls: "" }
       : checkErr
-        ? { text: "未获得 root", cls: "chip-err" }
-        : { text: "未连接", cls: "chip-idle" };
+        ? { text: "未获得 Root", cls: "err" }
+        : { text: "未连接", cls: "" };
 
   return (
-    <main className="container">
-      <header>
-        <div className="title-row">
-          <h1>LOLM 账号切换器</h1>
-          <span className={`chip ${chip.cls}`}>{chip.text}</span>
+    <div className="container">
+      <header className="appbar">
+        <div className="brand">
+          <div className="logo">🎮</div>
+          <div className="brand-text">
+            <h1>LOLM 账号切换器</h1>
+            <p>同机多账号 · 一键切换</p>
+          </div>
         </div>
-        <p className="sub">同机本地 · 需 root 授权</p>
+        <span className={`status ${status.cls}`}>
+          <span className="dot" />
+          {status.text}
+        </span>
       </header>
 
-      {banner && <div className={`banner ${banner.kind}`}>{banner.msg}</div>}
+      {banner && (
+        <div className={`toast ${banner.kind}`}>
+          <span>{banner.kind === "ok" ? "✅" : banner.kind === "err" ? "⚠️" : banner.kind === "warn" ? "💡" : "ℹ️"}</span>
+          <span>{banner.msg}</span>
+        </div>
+      )}
 
       <section className="card">
         <div className="toolbar">
-          <button className="primary" disabled={busy} onClick={doCheck}>
-            自检
+          <button className="btn btn-primary" disabled={busy} onClick={doCheck}>
+            🔍 自检
           </button>
           {!isMultiUser && (
             <>
-              <button className="ghost" disabled={busy} onClick={refresh}>
-                刷新
+              <button className="btn btn-ghost" disabled={busy} onClick={refresh}>
+                ↻ 刷新
               </button>
-              <button className="ghost" disabled={busy} onClick={doImport}>
-                从备份导入
+              <button className="btn btn-ghost" disabled={busy} onClick={doImport}>
+                📥 导入
               </button>
             </>
           )}
         </div>
+
         {check?.mode === "root" && (
-          <div className="info">
-            {`游戏包：${check.package}  uid/gid=${check.uid}/${check.gid}\n`}
-            {`Magisk：${check.magisk_version || "未知"}\n`}
-            {`DenyList 隐藏：${check.denylisted ? "已加入 ✔" : "未加入 ✘（建议加入防 ACE）"}\n`}
-            {`快照最小集：${check.subdirs.join(", ")}\n`}
-            {`游戏运行中：${check.running ? "是" : "否"}`}
+          <div className="stats">
+            <div className="stat">
+              <div className="k">游戏 UID / GID</div>
+              <div className="v">
+                {check.uid}/{check.gid}
+              </div>
+            </div>
+            <div className="stat">
+              <div className="k">Magisk</div>
+              <div className="v">{check.magisk_version || "未知"}</div>
+            </div>
+            <div className="stat">
+              <div className="k">DenyList 隐藏</div>
+              <div className={`v ${check.denylisted ? "ok" : "warn"}`}>
+                {check.denylisted ? "已加入" : "未加入"}
+              </div>
+            </div>
+            <div className="stat">
+              <div className="k">游戏运行中</div>
+              <div className="v">{check.running ? "是" : "否"}</div>
+            </div>
+            <div className="stat wide">
+              <div className="k">快照集</div>
+              <div className="v">{check.subdirs.join("  ·  ")}</div>
+            </div>
           </div>
         )}
-        {checkErr && <div className="info err-text">{`✘ ${checkErr}`}</div>}
+        {checkErr && (
+          <div className="stats">
+            <div className="stat wide">
+              <div className="k">自检失败</div>
+              <div className="v warn">{checkErr}</div>
+            </div>
+          </div>
+        )}
       </section>
 
       {isMultiUser ? (
         priv?.running ? (
-          <MultiUserAuto toast={toast} />
+          <MultiUserAuto toast={toast} askInput={askInput} askConfirm={askConfirm} />
         ) : (
           <MultiUserGuide
             startCommand={startCmd}
@@ -281,14 +347,18 @@ export default function App() {
       ) : (
         <>
           <section className="card">
-            <div className="card-head">
+            <div className="card-title">
               <h2>账号列表</h2>
-              <span className="muted">{index.slots.length ? `${index.slots.length} 个` : ""}</span>
+              {index.slots.length > 0 && <span className="count">{index.slots.length} 个</span>}
             </div>
             {index.slots.length === 0 ? (
-              <p className="hint">还没有保存的账号。在游戏里登录后，用下方“保存当前号”。</p>
+              <div className="empty">
+                <div className="em">👤</div>
+                <p>还没有保存的账号</p>
+                <p>在游戏里登录后，用下方「保存当前号」</p>
+              </div>
             ) : (
-              <div className="slots">
+              <div className="list">
                 {index.slots.map((s) => (
                   <SlotCard
                     key={s.slot}
@@ -296,7 +366,7 @@ export default function App() {
                     active={index.active === s.slot}
                     busy={busy}
                     onSwitch={doSwitch}
-                    onRename={(slot, name) => setRename({ slot, name })}
+                    onRename={doRename}
                     onExport={doExport}
                     onDelete={doDelete}
                   />
@@ -306,48 +376,66 @@ export default function App() {
           </section>
 
           <section className="card">
-            <h2>保存当前登录的账号</h2>
-            <p className="hint">在设备上登录好某个号并进入大厅后，填写标识并保存。</p>
-            <div className="form-row">
+            <div className="card-title">
+              <h2>保存当前登录的账号</h2>
+            </div>
+            <p className="subtle" style={{ marginBottom: 14 }}>
+              登录好某个号并进入大厅后，填写标识保存。
+            </p>
+            <div className="field">
+              <label>slot 标识</label>
               <input
                 type="text"
-                placeholder="slot 标识（如 a / main）"
+                placeholder="如 a / main"
                 value={saveSlot}
                 onChange={(e) => setSaveSlot(e.target.value)}
               />
+            </div>
+            <div className="field">
+              <label>昵称（可选）</label>
               <input
                 type="text"
-                placeholder="昵称（可选，如 大号）"
+                placeholder="如 大号"
                 value={saveName}
                 onChange={(e) => setSaveName(e.target.value)}
               />
-              <button className="primary" disabled={busy} onClick={doSave}>
-                保存当前号
-              </button>
             </div>
+            <button className="btn btn-primary btn-block" disabled={busy} onClick={doSave}>
+              💾 保存当前号
+            </button>
           </section>
         </>
       )}
 
-      <details className="card log-card">
+      <details className="log-card">
         <summary>操作日志</summary>
         <div className="log">
-          {logs.map((l, i) => (
-            <div key={i} className={`log-line ${l.kind}`}>
-              [{l.time}] {l.msg}
-            </div>
-          ))}
+          {logs.length === 0 ? (
+            <div className="log-line">暂无日志</div>
+          ) : (
+            logs.map((l, i) => (
+              <div key={i} className={`log-line ${l.kind}`}>
+                <span className="ts">{l.time}</span>
+                {l.msg}
+              </div>
+            ))
+          )}
         </div>
       </details>
 
-      {rename && (
-        <Modal
-          title={`重命名「${rename.name}」`}
-          initial={rename.name}
-          onOk={(v) => doRename(rename.slot, v)}
-          onCancel={() => setRename(null)}
+      {page && (
+        <Page
+          state={page}
+          onCancel={() => {
+            page.kind === "input" ? page.resolve(null) : page.resolve(false);
+            setPage(null);
+          }}
+          onOk={(value) => {
+            page.kind === "input" ? page.resolve(value) : page.resolve(true);
+            setPage(null);
+          }}
         />
       )}
-    </main>
+    </div>
   );
 }

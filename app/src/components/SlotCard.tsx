@@ -21,35 +21,46 @@ export default function SlotCard({
   onDelete,
 }: Props) {
   const meta = [
-    slot.user_id ? `ID:${slot.user_id}` : null,
-    `slot:${slot.slot}`,
+    slot.user_id ? `#${slot.user_id}` : null,
+    slot.slot,
     fmtSize(slot.size_kb),
     fmtTime(slot.updated_at_ms),
   ]
     .filter(Boolean)
-    .join(" · ");
+    .join("  ·  ");
+  const initial = (slot.name || slot.slot).trim().charAt(0) || "?";
 
   return (
-    <div className={`slot${active ? " active" : ""}`}>
-      <div className="slot-main">
-        <div className="slot-name">
+    <div className={`row${active ? " active" : ""}`}>
+      <div className="avatar">{initial}</div>
+      <div className="row-main">
+        <div className="row-name">
           {slot.name}
-          {active && <span className="badge">当前</span>}
+          {active && <span className="tag">当前</span>}
         </div>
-        <div className="slot-meta">{meta}</div>
+        <div className="row-meta">{meta}</div>
       </div>
-      <div className="slot-actions">
-        <button className="primary" disabled={busy} onClick={() => onSwitch(slot.slot, active)}>
+      <div className="row-actions">
+        <button
+          className="btn btn-primary btn-sm"
+          disabled={busy}
+          onClick={() => onSwitch(slot.slot, active)}
+        >
           {active ? "重载" : "切换"}
         </button>
-        <button className="ghost" disabled={busy} onClick={() => onRename(slot.slot, slot.name)}>
-          改名
+        <button className="icon-btn" title="改名" disabled={busy} onClick={() => onRename(slot.slot, slot.name)}>
+          ✏️
         </button>
-        <button className="ghost" disabled={busy} onClick={() => onExport(slot.slot)}>
-          导出
+        <button className="icon-btn" title="导出" disabled={busy} onClick={() => onExport(slot.slot)}>
+          📤
         </button>
-        <button className="danger" disabled={busy} onClick={() => onDelete(slot.slot, slot.name)}>
-          删除
+        <button
+          className="icon-btn danger"
+          title="删除"
+          disabled={busy}
+          onClick={() => onDelete(slot.slot, slot.name)}
+        >
+          🗑
         </button>
       </div>
     </div>
