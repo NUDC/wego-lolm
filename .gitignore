@@ -52,3 +52,6 @@ Thumbs.db
 *.iml
 *.suo
 *.sublime*
+
+# ---- 官网 ----
+site/dist/

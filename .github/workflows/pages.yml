@@ -1,6 +1,6 @@
 name: Pages
 
-# 官网部署。版本号在这里从 Cargo.toml 注入，保持和 APK 同一个来源。
+# 官网部署。版本号从 app/src-tauri/Cargo.toml 注入，和 APK 同一个来源。
 on:
   push:
     branches: [main]
@@ -15,7 +15,7 @@ permissions:
   pages: write
   id-token: write
 
-# 同一时间只跑一个部署，排队而不是取消，避免覆盖出旧版本
+# 排队而不是取消，避免并发部署把新版盖成旧版
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -29,22 +29,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 注入版本号
+      # 站点用 pnpm：npm 解析这套依赖会命中某个发布元数据里带 workspace:* 的
+      # 坏版本而直接失败，pnpm 能正常处理。app/ 那边仍然用 npm。
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+        working-directory: site
+
+      - name: 构建站点
+        working-directory: site
         run: |
           set -euo pipefail
-          VERSION=$(grep -m1 '^version' app/src-tauri/Cargo.toml | cut -d'"' -f2)
+          VERSION=$(grep -m1 '^version' ../app/src-tauri/Cargo.toml | cut -d'"' -f2)
           if [ -z "$VERSION" ]; then echo "读不到 Cargo.toml 的 version"; exit 1; fi
           echo "version = $VERSION"
-          mkdir -p _site
-          cp -r site/. _site/
-          sed -i "s/__VERSION__/${VERSION}/g" _site/index.html
-          grep -q "__VERSION__" _site/index.html && { echo "占位符替换失败"; exit 1; } || true
+          VITE_APP_VERSION="$VERSION" pnpm build
+          grep -q "$VERSION" dist/assets/*.js || { echo "版本号没进产物"; exit 1; }
 
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: _site
+          path: site/dist
 
       - id: deploy
         uses: actions/deploy-pages@v4
