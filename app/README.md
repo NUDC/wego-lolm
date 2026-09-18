@@ -33,6 +33,40 @@ npm run tauri android build -- --apk --target aarch64 --target x86_64   # releas
 - 前端在编译期嵌入 `.so`，但 `tauri-build` 对 `dist/` 有 `rerun-if-changed`，纯前端改动会自动触发 Rust 重编，不需要手动改 `lib.rs`。
 - debug 与 release 签名不同，互装需先卸载：`adb install app/LOLM账号切换器-通用-release.apk`。
 
+## 发布
+
+官网 <https://nudc.github.io/wego-lolm/>（源码在仓库根的 `site/`），版本号由
+Pages 工作流从 `Cargo.toml` 注入；下载按钮指向 `releases/latest/download/` 的固定资产名，
+所以发新版不需要改站点。
+
+发版步骤：
+
+```bash
+# 1. 改版本（唯一来源，APK 的 versionName 和「关于」页都读它）
+#    app/src-tauri/Cargo.toml 的 version
+# 2. 打标签，标签必须和 Cargo.toml 一致，否则 CI 会拒绝
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+`.github/workflows/release.yml` 会构建签名 APK、核对版本与签名、发到 Release。
+
+仓库需要先配好四个 secret（值取自本地 `gen/android/keystore.properties`）：
+
+| Secret | 说明 |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 app/release.jks` 的输出 |
+| `ANDROID_KEYSTORE_PASSWORD` | `storePassword` |
+| `ANDROID_KEY_ALIAS` | `keyAlias` |
+| `ANDROID_KEY_PASSWORD` | `keyPassword` |
+
+另需在仓库 Settings → Pages 把来源设为 **GitHub Actions**。
+
+**为什么 CI 里要先 `tauri android init`**：`gen/android/tauri.settings.gradle` 和
+`app/tauri.build.gradle.kts` 被 gitignore（内容含本机 cargo registry 的绝对路径），
+但 `settings.gradle` 用 `apply from` 强依赖它们，而 `tauri android build` **不会**重新生成——
+只有 `init` 会。init 会覆盖手工维护的 `app/build.gradle.kts`（签名配置 + 版本读取都在里面），
+所以紧接着用 `git checkout -- gen/android` 把已跟踪的文件恢复回来，新生成的 ignore 文件不受影响。
+
 ## 调试
 
 前端：Chrome `chrome://inspect/#devices` inspect 本 App 的 WebView。

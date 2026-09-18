@@ -1,0 +1,122 @@
+name: Release
+
+# 打 v* 标签时构建签名 APK 并发到 GitHub Release。
+# 资产名固定为 lolm-switcher-universal-release.apk，官网的下载按钮指向
+# releases/latest/download/<该名字>，所以名字不能随版本变。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r27c
+          local-cache: true
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri -> target
+
+      - run: npm ci
+        working-directory: app
+
+      - name: 写入签名材料
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_B64:-}" ]; then
+            echo "缺少 secret ANDROID_KEYSTORE_BASE64——没有它打出来的包无法签名"
+            exit 1
+          fi
+          AND=app/src-tauri/gen/android
+          mkdir -p "$AND/app"
+          echo "$KEYSTORE_B64" | base64 -d > "$AND/app/release.jks"
+          # storeFile 由 app 模块目录解析，所以这里用相对于 gen/android/app 的路径
+          cat > "$AND/keystore.properties" <<EOF
+          storeFile=release.jks
+          storePassword=${STORE_PASSWORD}
+          keyAlias=${KEY_ALIAS}
+          keyPassword=${KEY_PASSWORD}
+          EOF
+
+      # gen/android 里的 tauri.settings.gradle / tauri.build.gradle.kts 被 gitignore，
+      # 且内容含本机 cargo registry 的绝对路径，只能由 init 现场生成。
+      # init 会覆盖已跟踪的文件（签名配置、版本读取都在 app/build.gradle.kts 里），
+      # 所以随后用 git 把已跟踪的那部分恢复回来；新生成的 ignore 文件不受影响。
+      - name: 重建 Android 工程骨架
+        working-directory: app
+        run: npx tauri android init --skip-targets-install
+
+      - name: 恢复手工维护的 Android 配置
+        run: git checkout -- app/src-tauri/gen/android
+
+      - name: 构建 APK
+        working-directory: app
+        env:
+          NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: npx tauri android build --apk --target aarch64 --target x86_64
+
+      - name: 核对版本与产物
+        id: meta
+        run: |
+          set -euo pipefail
+          VERSION=$(grep -m1 '^version' app/src-tauri/Cargo.toml | cut -d'"' -f2)
+          SRC=app/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
+          test -f "$SRC" || { echo "找不到 APK：$SRC"; exit 1; }
+          mkdir -p dist
+          cp "$SRC" dist/lolm-switcher-universal-release.apk
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/aapt" dump badging dist/lolm-switcher-universal-release.apk | grep -E "^package:|native-code"
+          "$BT/apksigner" verify -v dist/lolm-switcher-universal-release.apk
+          # 标签和 Cargo.toml 必须一致，否则发出去的版本号会对不上
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$TAG" != "$VERSION" ]; then
+            echo "标签 v$TAG 与 Cargo.toml 的 $VERSION 不一致"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
+        with:
+          name: v${{ steps.meta.outputs.version }}
+          files: dist/lolm-switcher-universal-release.apk
+          generate_release_notes: true
+
+      - uses: actions/upload-artifact@v4
+        if: github.ref_type != 'tag'
+        with:
+          name: apk
+          path: dist/lolm-switcher-universal-release.apk

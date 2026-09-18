@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>LOLM 账号切换器</title>
+<meta name="description" content="英雄联盟手游同机多账号切换器。基于 root 的登录态快照，扫一次码存下来，之后免扫码秒切。" />
+<style>
+  /* 与 App 同一套设计 token */
+  :root {
+    --bg: #09090b;
+    --surface-1: #131317;
+    --surface-2: #1b1b20;
+    --line: #232329;
+    --line-strong: #2f2f37;
+    --text-1: #fafafa;
+    --text-2: #a0a0ab;
+    --text-3: #6a6a75;
+    --accent: #4f7cff;
+    --accent-soft: rgba(79, 124, 255, .14);
+    --success: #3fcf8e;
+    --success-soft: rgba(63, 207, 142, .14);
+    --gold: #c8aa6e;
+    --navy: #091224;
+    --r-lg: 16px;
+    --r: 12px;
+    --pill: 999px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text-1);
+    font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 20px 80px; }
+
+  /* ---------- 首屏 ---------- */
+  header { padding: 72px 0 8px; text-align: center; }
+  .mark {
+    width: 84px; height: 84px; margin: 0 auto 22px;
+    border-radius: 22px; background: var(--navy);
+    display: grid; place-items: center;
+    border: 1px solid var(--line-strong);
+  }
+  h1 { margin: 0 0 10px; font-size: 34px; font-weight: 700; letter-spacing: -.6px; }
+  .tagline { margin: 0 auto; max-width: 30em; color: var(--text-2); font-size: 16px; }
+  .badges { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin: 20px 0 28px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 28px; padding: 0 12px; border-radius: var(--pill);
+    background: var(--surface-2); border: 1px solid var(--line-strong);
+    color: var(--text-2); font-size: 12.5px; font-weight: 550;
+    font-variant-numeric: tabular-nums;
+  }
+  .badge.ok { color: var(--success); background: var(--success-soft); border-color: rgba(63,207,142,.28); }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  .cta { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 48px; padding: 0 22px; border-radius: var(--r);
+    font-size: 15px; font-weight: 600; text-decoration: none;
+    border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text-1);
+    transition: background .15s, border-color .15s;
+  }
+  .btn:hover { background: #24242a; }
+  .btn-primary { background: var(--accent); border-color: transparent; color: #fff; }
+  .btn-primary:hover { background: #3d67e6; }
+  .cta-note { text-align: center; color: var(--text-3); font-size: 13px; margin-top: 14px; }
+
+  /* ---------- 通用块 ---------- */
+  section { margin-top: 64px; }
+  h2 { font-size: 20px; font-weight: 650; letter-spacing: -.3px; margin: 0 0 18px; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .card {
+    background: var(--surface-1); border: 1px solid var(--line);
+    border-radius: var(--r-lg); padding: 18px 20px;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+  .card p { margin: 0; color: var(--text-2); font-size: 14px; }
+
+  /* ---------- 步骤 ---------- */
+  ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; }
+  ol.steps li {
+    counter-increment: s; position: relative;
+    padding: 14px 0 14px 46px; border-top: 1px solid var(--line);
+  }
+  ol.steps li:first-child { border-top: none; }
+  ol.steps li::before {
+    content: counter(s); position: absolute; left: 0; top: 14px;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent);
+    display: grid; place-items: center; font-size: 13px; font-weight: 700;
+  }
+  ol.steps b { font-weight: 600; }
+  ol.steps span { display: block; color: var(--text-2); font-size: 14px; }
+
+  /* ---------- App 界面示意（纯 CSS，不用截图）---------- */
+  .preview {
+    max-width: 380px; margin: 0 auto;
+    background: var(--surface-1); border: 1px solid var(--line);
+    border-radius: 22px; padding: 14px; overflow: hidden;
+  }
+  .pv-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 4px 4px 14px; border-bottom: 1px solid var(--line); margin-bottom: 14px;
+  }
+  .pv-brand { display: flex; align-items: center; gap: 10px; }
+  .pv-mark { width: 30px; height: 30px; border-radius: 9px; background: var(--accent-soft); display: grid; place-items: center; }
+  .pv-title { font-size: 14px; font-weight: 650; }
+  .pv-sub { font-size: 10.5px; color: var(--text-3); }
+  .pv-chip {
+    display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px;
+    border-radius: var(--pill); font-size: 11px; font-weight: 600;
+    color: var(--success); background: var(--success-soft); border: 1px solid rgba(63,207,142,.28);
+  }
+  .pv-list { background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+  .pv-row { display: flex; align-items: center; gap: 10px; padding: 14px 12px 14px 15px; }
+  .pv-row + .pv-row { border-top: 1px solid var(--line); }
+  .pv-name { font-size: 14.5px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+  .pv-meta { font-size: 11.5px; color: var(--text-3); margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .pv-tag { font-size: 9.5px; font-weight: 600; padding: 2px 6px; border-radius: var(--pill); background: var(--success-soft); color: var(--success); }
+  .pv-act {
+    margin-left: auto; height: 28px; padding: 0 12px; border-radius: 8px;
+    background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600;
+    display: grid; place-items: center; flex-shrink: 0;
+  }
+  .pv-foot { display: flex; gap: 8px; margin-top: 14px; }
+  .pv-btn { height: 38px; border-radius: 10px; font-size: 13px; font-weight: 600; display: grid; place-items: center; }
+  .pv-btn.ghost { padding: 0 14px; background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--text-1); }
+  .pv-btn.solid { flex: 1; background: var(--accent); color: #fff; }
+
+  /* ---------- 注意事项 ---------- */
+  .warn {
+    border: 1px solid rgba(242,85,90,.28); background: rgba(242,85,90,.06);
+    border-radius: var(--r-lg); padding: 16px 20px;
+  }
+  .warn h3 { margin: 0 0 6px; font-size: 14.5px; font-weight: 600; color: #f2555a; }
+  .warn p { margin: 0 0 8px; color: var(--text-2); font-size: 14px; }
+  .warn p:last-child { margin-bottom: 0; }
+
+  footer {
+    margin-top: 72px; padding-top: 24px; border-top: 1px solid var(--line);
+    color: var(--text-3); font-size: 13px; text-align: center;
+  }
+  code {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: .92em; background: var(--surface-2);
+    padding: 1px 6px; border-radius: 6px; color: var(--text-1);
+  }
+  @media (max-width: 600px) {
+    header { padding-top: 48px; }
+    h1 { font-size: 27px; }
+    section { margin-top: 48px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="mark">
+      <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#c8aa6e"
+           stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3.8 9.2h15.1M15.4 5.7l3.5 3.5-3.5 3.5" />
+        <path d="M20.2 14.8H5.1M8.6 11.3l-3.5 3.5 3.5 3.5" />
+      </svg>
+    </div>
+    <h1>LOLM 账号切换器</h1>
+    <p class="tagline">
+      英雄联盟手游同机多账号切换。把每个号的登录态存成快照，
+      扫一次码存下来，之后切号免扫码、几秒完成。
+    </p>
+
+    <div class="badges">
+      <span class="badge ok"><span class="dot"></span>v<span id="ver">__VERSION__</span></span>
+      <span class="badge">Android 7.0+</span>
+      <span class="badge">需要 Root</span>
+      <span class="badge">arm64 · x86_64</span>
+    </div>
+
+    <div class="cta">
+      <a class="btn btn-primary" id="dl"
+         href="https://github.com/NUDC/wego-lolm/releases/latest/download/lolm-switcher-universal-release.apk">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20.5 15.4v3.3a1.8 1.8 0 0 1-1.8 1.8H5.3a1.8 1.8 0 0 1-1.8-1.8v-3.3" />
+          <path d="M7.6 10.6 12 15l4.4-4.4M12 15V3.5" />
+        </svg>
+        下载 APK
+      </a>
+      <a class="btn" href="https://github.com/NUDC/wego-lolm">源码</a>
+      <a class="btn" href="https://github.com/NUDC/wego-lolm/releases">历史版本</a>
+    </div>
+    <p class="cta-note">通用包，真机与模拟器通用。安装后需在 Magisk 或 KernelSU 中授予 root 权限。</p>
+  </header>
+
+  <section>
+    <h2>它解决什么</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>扫一次，管很久</h3>
+        <p>账号绑在别人微信上时，每次切回来都要找对方扫码。存成快照后，切号不再需要任何人配合。</p>
+      </div>
+      <div class="card">
+        <h3>一份安装，十个号</h3>
+        <p>快照只存登录态目录，每个号几十 MB。不像多用户方案那样按账号数翻倍占用存储。</p>
+      </div>
+      <div class="card">
+        <h3>同一实例秒切</h3>
+        <p>回存当前号 → 停游戏 → 还原目标号 → 自动拉起，全程几秒，不用切换系统用户。</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>界面</h2>
+    <div class="preview">
+      <div class="pv-bar">
+        <div class="pv-brand">
+          <div class="pv-mark">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#4f7cff"
+                 stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3.8 9.2h15.1M15.4 5.7l3.5 3.5-3.5 3.5" />
+              <path d="M20.2 14.8H5.1M8.6 11.3l-3.5 3.5 3.5 3.5" />
+            </svg>
+          </div>
+          <div>
+            <div class="pv-title">LOLM 账号切换器</div>
+            <div class="pv-sub">3 个账号</div>
+          </div>
+        </div>
+        <span class="pv-chip"><span class="dot" style="width:5px;height:5px;border-radius:50%;background:currentColor"></span>就绪</span>
+      </div>
+
+      <div class="pv-list">
+        <div class="pv-row">
+          <div>
+            <div class="pv-name">大号<span class="pv-tag">当前</span></div>
+            <div class="pv-meta">#7261141836722937 · 2 分钟前</div>
+          </div>
+          <div class="pv-act">启动</div>
+        </div>
+        <div class="pv-row">
+          <div>
+            <div class="pv-name">小号</div>
+            <div class="pv-meta">#8805957327762259 · 3 小时前</div>
+          </div>
+          <div class="pv-act">切换</div>
+        </div>
+        <div class="pv-row">
+          <div>
+            <div class="pv-name">朋友的号</div>
+            <div class="pv-meta">#4417820935514663 · 昨天</div>
+          </div>
+          <div class="pv-act">切换</div>
+        </div>
+      </div>
+
+      <div class="pv-foot">
+        <div class="pv-btn ghost">登录新号</div>
+        <div class="pv-btn solid">＋ 保存当前号</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>怎么用</h2>
+    <ol class="steps">
+      <li><b>安装并授权</b><span>装好 APK 后打开，在 Magisk 或 KernelSU 的超级用户列表里给它授权。授权后应用会自动重启。</span></li>
+      <li><b>登录第一个号</b><span>点「登录新号」，应用会清空登录态并拉起游戏。扫码登录好之后回到应用，点「保存当前号」。</span></li>
+      <li><b>重复到所有号都存好</b><span>每加一个号重复上一步。应用会在清空前自动回存当前号，不会弄丢已登录的账号。</span></li>
+      <li><b>之后只用列表</b><span>点「切换」即可换号，不再需要扫码。当前号那一行是「启动」，直接打开游戏。</span></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>限制与风险</h2>
+    <div class="warn">
+      <h3>必须 Root</h3>
+      <p>登录态存在游戏的私有目录里，Android 沙箱不允许其他应用读写。没有 root 无法实现，这是系统限制而非功能取舍。</p>
+      <h3>切换会强制停止游戏</h3>
+      <p>切号要替换游戏数据目录，因此会先 force-stop。对局中误触会直接掉线。</p>
+      <h3>自行判断账号风险</h3>
+      <p>本工具仅用于管理自己的账号。频繁切换是否触发游戏方的风控，需自行判断和控制频率。</p>
+    </div>
+  </section>
+
+  <footer>
+    开源于 <a href="https://github.com/NUDC/wego-lolm">github.com/NUDC/wego-lolm</a><br />
+    与 Riot Games、腾讯均无关联。
+  </footer>
+
+</div>
+
+<script>
+  // 版本号由 Pages 工作流在部署时从 Cargo.toml 注入，替换 __VERSION__。
+  // 本地直接打开时占位符还在，回退成读最新 release。
+  (function () {
+    var el = document.getElementById('ver');
+    if (!el || el.textContent.indexOf('VERSION') === -1) return;
+    el.textContent = '…';
+    fetch('https://api.github.com/repos/NUDC/wego-lolm/releases/latest')
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+      .then(function (j) { el.textContent = String(j.tag_name || '').replace(/^v/, '') || '—'; })
+      .catch(function () { el.textContent = '—'; });
+  })();
+</script>
+</body>
+</html>
