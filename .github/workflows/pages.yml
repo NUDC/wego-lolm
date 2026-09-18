@@ -29,19 +29,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 站点用 pnpm：npm 解析这套依赖会命中某个发布元数据里带 workspace:* 的
-      # 坏版本而直接失败，pnpm 能正常处理。app/ 那边仍然用 npm。
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
-          cache-dependency-path: site/pnpm-lock.yaml
+          cache: npm
+          cache-dependency-path: site/package-lock.json
 
-      - run: pnpm install --frozen-lockfile
+      - run: npm ci --no-audit --no-fund
         working-directory: site
 
       - name: 构建站点
@@ -51,7 +45,7 @@ jobs:
           VERSION=$(grep -m1 '^version' ../app/src-tauri/Cargo.toml | cut -d'"' -f2)
           if [ -z "$VERSION" ]; then echo "读不到 Cargo.toml 的 version"; exit 1; fi
           echo "version = $VERSION"
-          VITE_APP_VERSION="$VERSION" pnpm build
+          VITE_APP_VERSION="$VERSION" npm run build
           grep -q "$VERSION" dist/assets/*.js || { echo "版本号没进产物"; exit 1; }
 
       - uses: actions/configure-pages@v5

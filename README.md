@@ -44,10 +44,10 @@ npm run tauri android build -- --apk --target aarch64    # release（真机）
 官网：
 
 ```bash
-cd site && pnpm install && pnpm dev
+cd site && npm install && npm run dev
 ```
 
-站点用 pnpm——npm 解析这套依赖会命中某个发布元数据里带 `workspace:*` 的坏版本而直接失败。`app/` 那边仍然用 npm。
+全仓统一用 npm。注意别在 `site/` 里混用 pnpm——pnpm 的符号链接布局会让后续的 `npm install` 报 `EUNSUPPORTEDPROTOCOL: workspace:*`，删掉 `node_modules` 重装即可恢复。
 
 ## 发布
 

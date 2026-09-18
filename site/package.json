@@ -8,16 +8,15 @@
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
-  "comment": "版本全部精确锁定：用范围解析会命中某个发布元数据里带 workspace:* 的坏版本，npm 直接失败。这里的版本与 app/ 中实测可用的一致。",
   "dependencies": {
-    "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   },
   "devDependencies": {
-    "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0",
-    "@vitejs/plugin-react": "6.1.1",
-    "typescript": "7.0.2",
-    "vite": "8.3.0"
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
   }
 }
