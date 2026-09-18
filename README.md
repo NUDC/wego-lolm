@@ -50,15 +50,10 @@ git tag v1.0.0 && git push origin v1.0.0
 `lolm-switcher-arm64-release.apk`（官网下载链接指向它，发新版不用改站点）。
 `pages.yml` 在推 main 时部署官网。
 
-需先配好 secret（值取自 `app/src-tauri/gen/android/keystore.properties`），
-并把 Settings → Pages 的来源设为 **GitHub Actions**：
+需把 Settings → Pages 的来源设为 **GitHub Actions**。
 
-| Secret | 值 |
-|---|---|
-| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 app/release.jks` |
-| `ANDROID_KEYSTORE_PASSWORD` | `storePassword` |
-| `ANDROID_KEY_ALIAS` | `keyAlias` |
-| `ANDROID_KEY_PASSWORD` | `keyPassword` |
+签名材料（keystore 的 base64 + 密码）**直接内联在 `release.yml` 里**，不走 repository secrets。
+换 keystore 时改那个文件的 `env` 块。注意这意味着私钥和密码在仓库历史中公开可见。
 
 CI 里为什么要先 `tauri android init` 再 `git checkout` 恢复配置，见 `release.yml` 里的注释。
 
