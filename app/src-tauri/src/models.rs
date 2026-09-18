@@ -34,18 +34,15 @@ pub(crate) struct Index {
     pub slots: Vec<SlotMeta>,
 }
 
-/// 自检结果：决定前端走 root 一键切换还是免 root 多用户。
+/// 自检结果。返回 Ok 即代表 root 已就绪；无 root 时 `check` 直接返回 Err。
+/// root 正常但游戏没装是另一类问题，用 `game_installed` 区分，别混进 root 报错里。
 #[derive(Serialize)]
 pub(crate) struct CheckResult {
-    /// "root" = 有 root，走一键切换；"multiuser" = 无 root，走多用户
-    pub mode: String,
-    pub root: bool,
+    pub game_installed: bool,
+    /// game_installed 为 false 时的具体原因（含原始命令返回，便于定位）
+    pub problem: String,
     pub uid: String,
     pub gid: String,
-    pub package: String,
     pub subdirs: Vec<String>,
-    pub device_slot_root: String,
     pub running: bool,
-    pub magisk_version: String,
-    pub denylisted: bool,
 }

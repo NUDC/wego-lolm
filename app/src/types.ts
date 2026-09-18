@@ -1,16 +1,13 @@
 // 与 Rust 后端序列化字段一一对应（serde 默认 snake_case）
 
+/// 自检成功即代表 root 已就绪；无 root 时后端直接抛错。
 export interface CheckResult {
-  mode: "root" | "multiuser";
-  root: boolean;
+  game_installed: boolean;
+  problem: string;
   uid: string;
   gid: string;
-  package: string;
   subdirs: string[];
-  device_slot_root: string;
   running: boolean;
-  magisk_version: string;
-  denylisted: boolean;
 }
 
 export interface SlotMeta {
@@ -28,44 +25,17 @@ export interface SlotIndex {
   slots: SlotMeta[];
 }
 
-// 自建特权服务（免 root 多用户）
-export interface PrivStatus {
-  running: boolean;
-}
+// 路由：首页 = 账号列表，其余都是整页切换
+export type Route =
+  | { kind: "home" }
+  | { kind: "edit"; slot: string }
+  | { kind: "about" };
 
-export interface StartCommand {
-  command: string;
+// 确认页（替代弹窗）。改名等输入已内联到编辑页，不再需要输入态。
+export interface PageState {
+  title: string;
+  message: string;
+  danger: boolean;
+  ok: string;
+  resolve: (v: boolean) => void;
 }
-
-export interface ExecResult {
-  stdout: string;
-  stderr: string;
-  code: number;
-}
-
-export interface AndroidUser {
-  id: number;
-  name: string;
-  running: boolean;
-  current: boolean;
-}
-
-// 子页面（替代弹窗）状态
-export type PageState =
-  | {
-      kind: "input";
-      title: string;
-      label?: string;
-      placeholder?: string;
-      value: string;
-      ok: string;
-      resolve: (v: string | null) => void;
-    }
-  | {
-      kind: "confirm";
-      title: string;
-      message: string;
-      danger?: boolean;
-      ok: string;
-      resolve: (v: boolean) => void;
-    };

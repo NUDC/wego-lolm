@@ -6,12 +6,14 @@ plugins {
     id("rust")
 }
 
-val tauriProperties = Properties().apply {
-    val propFile = file("tauri.properties")
-    if (propFile.exists()) {
-        propFile.inputStream().use { load(it) }
-    }
-}
+// 版本直接取自 src-tauri/Cargo.toml，保证单一来源。
+// 不读 tauri.properties：那个文件只在 `tauri android init` 时生成一次，
+// 之后 `tauri android build` 不会更新它，版本号会悄悄和 Cargo.toml 脱钩。
+val cargoVersion: String = file("../../../Cargo.toml").readLines()
+    .first { it.trimStart().startsWith("version") }
+    .substringAfter('"')
+    .substringBefore('"')
+val cargoVersionParts: List<Int> = cargoVersion.split(".").map { it.toInt() }
 
 android {
     compileSdk = 36
@@ -21,8 +23,10 @@ android {
         applicationId = "com.wego.lolmswitch"
         minSdk = 24
         targetSdk = 36
-        versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
-        versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+        // 与 Tauri 的换算规则一致：major*1000000 + minor*1000 + patch
+        versionCode =
+            cargoVersionParts[0] * 1000000 + cargoVersionParts[1] * 1000 + cargoVersionParts[2]
+        versionName = cargoVersion
     }
     signingConfigs {
         create("release") {

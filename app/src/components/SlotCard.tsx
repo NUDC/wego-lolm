@@ -1,68 +1,38 @@
 import type { SlotMeta } from "../types";
-import { fmtSize, fmtTime } from "../lib/format";
+import { fmtRelTime } from "../lib/format";
 
 interface Props {
   slot: SlotMeta;
   active: boolean;
   busy: boolean;
-  onSwitch: (slot: string, active: boolean) => void;
-  onRename: (slot: string, name: string) => void;
-  onExport: (slot: string) => void;
-  onDelete: (slot: string, name: string) => void;
+  onSwitch: (slot: string) => void;
+  onLaunch: () => void;
+  onEdit: (slot: string) => void;
 }
 
-export default function SlotCard({
-  slot,
-  active,
-  busy,
-  onSwitch,
-  onRename,
-  onExport,
-  onDelete,
-}: Props) {
-  const meta = [
-    slot.user_id ? `#${slot.user_id}` : null,
-    slot.slot,
-    fmtSize(slot.size_kb),
-    fmtTime(slot.updated_at_ms),
-  ]
+export default function SlotCard({ slot, active, busy, onSwitch, onLaunch, onEdit }: Props) {
+  const meta = [slot.user_id ? `#${slot.user_id}` : null, fmtRelTime(slot.updated_at_ms)]
     .filter(Boolean)
     .join("  ·  ");
-  const initial = (slot.name || slot.slot).trim().charAt(0) || "?";
 
   return (
-    <div className={`row${active ? " active" : ""}`}>
-      <div className="avatar">{initial}</div>
-      <div className="row-main">
-        <div className="row-name">
+    <div className="account">
+      {/* 整行进详情，右侧只留一个操作按钮——每行一个控件就够了 */}
+      <button className="account-main" disabled={busy} onClick={() => onEdit(slot.slot)}>
+        <span className="account-name">
           {slot.name}
           {active && <span className="tag">当前</span>}
-        </div>
-        <div className="row-meta">{meta}</div>
-      </div>
-      <div className="row-actions">
-        <button
-          className="btn btn-primary btn-sm"
-          disabled={busy}
-          onClick={() => onSwitch(slot.slot, active)}
-        >
-          {active ? "重载" : "切换"}
-        </button>
-        <button className="icon-btn" title="改名" disabled={busy} onClick={() => onRename(slot.slot, slot.name)}>
-          ✏️
-        </button>
-        <button className="icon-btn" title="导出" disabled={busy} onClick={() => onExport(slot.slot)}>
-          📤
-        </button>
-        <button
-          className="icon-btn danger"
-          title="删除"
-          disabled={busy}
-          onClick={() => onDelete(slot.slot, slot.name)}
-        >
-          🗑
-        </button>
-      </div>
+        </span>
+        <span className="account-meta">{meta}</span>
+      </button>
+      {/* 已经是当前号时，需要的是「打开游戏」而不是再走一遍快照搬运 */}
+      <button
+        className="btn btn-tonal btn-sm"
+        disabled={busy}
+        onClick={() => (active ? onLaunch() : onSwitch(slot.slot))}
+      >
+        {active ? "启动" : "切换"}
+      </button>
     </div>
   );
 }

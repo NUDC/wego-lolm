@@ -1,4 +1,2 @@
-# 自建特权服务：由 app_process 按类名(com.plugin.shizuku.PrivServer)启动，
-# 必须保留类名与 main 方法，禁止混淆/裁剪。
--keep class com.plugin.shizuku.PrivServer { *; }
--keep class com.plugin.shizuku.** { *; }
+# 本 App 只走 root 快照模式，无需 keep 任何按类名反射启动的类。
+# （release 的 proguardFiles 用 fileTree 通配 **/*.pro，本文件留空即可。）

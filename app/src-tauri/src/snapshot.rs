@@ -9,7 +9,7 @@ use crate::device::{
 use crate::index::{read_index, upsert_meta, write_index};
 use crate::models::{CheckResult, Index};
 use crate::shell::shell_root;
-use crate::{BACKUP_ROOT, DEVICE_SLOT_ROOT, PACKAGE};
+use crate::{DEVICE_SLOT_ROOT, PACKAGE};
 
 // ---------------- 核心流程 ----------------
 
@@ -76,45 +76,33 @@ fn launch_game() -> Result<(), String> {
 
 #[tauri::command]
 pub fn check() -> Result<CheckResult, String> {
-    // 探测 root：su 返回 0 即有 root；否则回退多用户（不报错）
-    let has_root = shell_root("id -u").map(|o| o.trim() == "0").unwrap_or(false);
-    if !has_root {
-        return Ok(CheckResult {
-            mode: "multiuser".to_string(),
-            root: false,
+    // su 返回 uid 0 才算就绪；没装 Magisk / 授权被拒时 shell_root 已带出可读原因
+    let uid0 = shell_root("id -u")?;
+    if uid0.trim() != "0" {
+        return Err(format!(
+            "su 未返回 root（id -u = {}）—— 请在 Magisk / KernelSU 里对本应用点“允许”。",
+            uid0.trim()
+        ));
+    }
+    // 到这里 root 已确认可用。游戏没装不算 root 失败，单独报。
+    match game_uid_gid() {
+        Ok((uid, gid)) => Ok(CheckResult {
+            game_installed: true,
+            problem: String::new(),
+            uid,
+            gid,
+            subdirs: data_items().unwrap_or_default(),
+            running: game_running(),
+        }),
+        Err(problem) => Ok(CheckResult {
+            game_installed: false,
+            problem,
             uid: String::new(),
             gid: String::new(),
-            package: PACKAGE.to_string(),
             subdirs: Vec::new(),
-            device_slot_root: DEVICE_SLOT_ROOT.to_string(),
             running: false,
-            magisk_version: String::new(),
-            denylisted: false,
-        });
+        }),
     }
-    let magisk_version = shell_root("magisk -v 2>/dev/null")
-        .unwrap_or_default()
-        .lines()
-        .next()
-        .unwrap_or("")
-        .trim()
-        .to_string();
-    let denylisted = shell_root("magisk --denylist ls 2>/dev/null")
-        .map(|o| o.lines().any(|l| l.contains(PACKAGE)))
-        .unwrap_or(false);
-    let (uid, gid) = game_uid_gid()?;
-    Ok(CheckResult {
-        mode: "root".to_string(),
-        root: true,
-        uid,
-        gid,
-        package: PACKAGE.to_string(),
-        subdirs: data_items().unwrap_or_default(),
-        device_slot_root: DEVICE_SLOT_ROOT.to_string(),
-        running: game_running(),
-        magisk_version,
-        denylisted,
-    })
 }
 
 #[tauri::command]
@@ -129,21 +117,16 @@ pub fn save_slot(app: AppHandle, slot: String, name: Option<String>) -> Result<S
 }
 
 #[tauri::command]
-pub fn switch_slot(
-    app: AppHandle,
-    slot: String,
-    no_save_current: Option<bool>,
-) -> Result<String, String> {
+pub fn switch_slot(app: AppHandle, slot: String) -> Result<String, String> {
     let mut idx = read_index(&app)?;
     if !idx.slots.iter().any(|m| m.slot == slot) {
         return Err(format!("slot '{slot}' 未登记，请先保存。"));
     }
-    if !no_save_current.unwrap_or(false) {
-        if let Some(active) = idx.active.clone() {
-            if active != slot {
-                do_save(&app, &active, &None)?;
-                idx = read_index(&app)?;
-            }
+    // 先把当前号的最新登录态回存，再还原目标号，避免丢进度
+    if let Some(active) = idx.active.clone() {
+        if active != slot {
+            do_save(&app, &active, &None)?;
+            idx = read_index(&app)?;
         }
     }
     do_restore(&slot)?;
@@ -151,6 +134,48 @@ pub fn switch_slot(
     idx.active = Some(slot.clone());
     write_index(&app, &idx)?;
     Ok(format!("已切换到 '{slot}'（若还原成功应免扫码进入）。"))
+}
+
+/// 应用版本（取自 Cargo.toml，与 APK 的 versionName 同源）。
+#[tauri::command]
+pub fn app_version(app: AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
+/// 只拉起游戏，不碰任何快照数据。
+#[tauri::command]
+pub fn launch() -> Result<String, String> {
+    launch_game()?;
+    Ok("已启动游戏".into())
+}
+
+/// 清空登录态并拉起游戏，让游戏回到扫码/登录界面，用于登录一个新号。
+/// 关键：先把当前号回存，否则清空后这个号就得重新找人扫码。
+#[tauri::command]
+pub fn new_login(app: AppHandle) -> Result<String, String> {
+    let mut idx = read_index(&app)?;
+    let kept = idx.active.clone();
+    if let Some(active) = kept.clone() {
+        do_save(&app, &active, &None)?;
+        idx = read_index(&app)?;
+    }
+
+    let (uid, gid) = game_uid_gid()?;
+    stop_game()?;
+    for it in data_items()? {
+        shell_root(&format!("rm -rf /data/data/{PACKAGE}/{it}"))?;
+    }
+    // 游戏会自己重建这些目录，但属主/上下文先修好更稳
+    let _ = shell_root(&format!("chown -R {uid}:{gid} /data/data/{PACKAGE}"));
+    let _ = shell_root(&format!("restorecon -R /data/data/{PACKAGE}"));
+    launch_game()?;
+
+    idx.active = None;
+    write_index(&app, &idx)?;
+    Ok(match kept {
+        Some(slot) => format!("已回存 '{slot}' 并清空登录态，游戏已拉起，请扫码登录新号。"),
+        None => "已清空登录态，游戏已拉起，请扫码登录新号。".into(),
+    })
 }
 
 #[tauri::command]
@@ -181,40 +206,3 @@ pub fn rename_slot(app: AppHandle, slot: String, name: String) -> Result<String,
     Ok(format!("已重命名为 '{}'", name.trim()))
 }
 
-#[tauri::command]
-pub fn export_slot(slot: String) -> Result<String, String> {
-    let src = format!("{DEVICE_SLOT_ROOT}/{slot}");
-    let exists = shell_root(&format!("test -d {src} && echo yes || echo no"))?;
-    if exists.trim() != "yes" {
-        return Err(format!("slot '{slot}' 的快照不存在"));
-    }
-    let dst = format!("{BACKUP_ROOT}/{slot}");
-    shell_root(&format!("mkdir -p {BACKUP_ROOT} && rm -rf {dst} && cp -a {src} {dst}"))?;
-    Ok(format!("已导出到 {dst}"))
-}
-
-#[tauri::command]
-pub fn import_backups(app: AppHandle) -> Result<String, String> {
-    let out = shell_root(&format!("ls {BACKUP_ROOT} 2>/dev/null"))?;
-    let slots: Vec<String> = out
-        .lines()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty())
-        .collect();
-    if slots.is_empty() {
-        return Err(format!("{BACKUP_ROOT} 下没有备份"));
-    }
-    let mut idx = read_index(&app)?;
-    let mut n = 0;
-    for slot in &slots {
-        let src = format!("{BACKUP_ROOT}/{slot}");
-        let dst = format!("{DEVICE_SLOT_ROOT}/{slot}");
-        shell_root(&format!("mkdir -p {DEVICE_SLOT_ROOT} && rm -rf {dst} && cp -a {src} {dst}"))?;
-        let items = slot_items(slot)?;
-        let size_kb = slot_size_kb(slot);
-        upsert_meta(&mut idx, slot, &None, "", &items, size_kb, "");
-        n += 1;
-    }
-    write_index(&app, &idx)?;
-    Ok(format!("已从备份导入 {n} 个 slot"))
-}

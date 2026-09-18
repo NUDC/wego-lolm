@@ -7,8 +7,10 @@ use crate::{DEVICE_SLOT_ROOT, INCLUDE, PACKAGE};
 pub(crate) fn game_uid_gid() -> Result<(String, String), String> {
     let exists = shell_root(&format!("test -d /data/data/{PACKAGE} && echo yes || echo no"))?;
     if exists.trim() != "yes" {
+        // 带上原始返回：区分「目录真不存在」和「su 会话返回了意料外的内容」
         return Err(format!(
-            "未找到 /data/data/{PACKAGE} —— 请确认已安装英雄联盟手游并至少登录过一次。"
+            "未找到 /data/data/{PACKAGE} —— 请确认已安装英雄联盟手游并至少登录过一次。（test 返回：{:?}）",
+            exists.trim()
         ));
     }
     let uid = shell_root(&format!("stat -c %u /data/data/{PACKAGE}"))?.trim().to_string();
