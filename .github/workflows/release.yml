@@ -31,7 +31,11 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      # 必须显式指定 packages：默认值里的 `tools` 早已从 Android 仓库下架，
+      # 不覆盖就会 "Failed to find package 'tools'" 直接失败。
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;35.0.0'
 
       - uses: nttld/setup-ndk@v1
         id: ndk
