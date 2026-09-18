@@ -12,7 +12,7 @@ dist-ssr/
 *.tsbuildinfo
 
 # ---- Tauri 生成物 ----
-gen/schemas/
+**/gen/schemas/
 .tauri/
 **/generated/
 **/tauri.settings.gradle
